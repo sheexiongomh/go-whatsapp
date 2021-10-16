@@ -2,7 +2,6 @@ package whatsapp
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -207,7 +206,6 @@ func (wac *Conn) handle(message interface{}) {
 }
 
 func (wac *Conn) handleWithCustomHandlers(message interface{}, handlers []Handler) {
-	log.Println(message)
 	switch m := message.(type) {
 	case error:
 		for _, h := range handlers {
