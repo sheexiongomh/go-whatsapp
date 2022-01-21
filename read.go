@@ -10,13 +10,13 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sheexiongomh/go-whatsapp/binary"
-	"github.com/sheexiongomh/go-whatsapp/crypto/cbc"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
+	"github.com/sheexiongomh/go-whatsapp/binary"
+	"github.com/sheexiongomh/go-whatsapp/crypto/cbc"
 )
 
-func (wac *Conn) readPump() {
+func (wac *Conn) ReadPump() {
 	defer func() {
 		wac.wg.Done()
 		_, _ = wac.Disconnect()
