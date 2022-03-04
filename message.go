@@ -23,7 +23,7 @@ const (
 	MediaDocument MediaType = "WhatsApp Document Keys"
 )
 
-func (wac *Conn) Send(msg interface{}) (string, error) {
+func (wac *Conn) Send(msg interface{}) (string, uint64, error) {
 	var msgProto *proto.WebMessageInfo
 
 	switch m := msg.(type) {
@@ -35,28 +35,28 @@ func (wac *Conn) Send(msg interface{}) (string, error) {
 		var err error
 		m.url, m.mediaKey, m.fileEncSha256, m.fileSha256, m.fileLength, err = wac.Upload(m.Content, MediaImage)
 		if err != nil {
-			return "ERROR", fmt.Errorf("image upload failed: %v", err)
+			return "ERROR", 0, fmt.Errorf("image upload failed: %v", err)
 		}
 		msgProto = getImageProto(m)
 	case VideoMessage:
 		var err error
 		m.url, m.mediaKey, m.fileEncSha256, m.fileSha256, m.fileLength, err = wac.Upload(m.Content, MediaVideo)
 		if err != nil {
-			return "ERROR", fmt.Errorf("video upload failed: %v", err)
+			return "ERROR", 0, fmt.Errorf("video upload failed: %v", err)
 		}
 		msgProto = getVideoProto(m)
 	case DocumentMessage:
 		var err error
 		m.url, m.mediaKey, m.fileEncSha256, m.fileSha256, m.fileLength, err = wac.Upload(m.Content, MediaDocument)
 		if err != nil {
-			return "ERROR", fmt.Errorf("document upload failed: %v", err)
+			return "ERROR", 0, fmt.Errorf("document upload failed: %v", err)
 		}
 		msgProto = getDocumentProto(m)
 	case AudioMessage:
 		var err error
 		m.url, m.mediaKey, m.fileEncSha256, m.fileSha256, m.fileLength, err = wac.Upload(m.Content, MediaAudio)
 		if err != nil {
-			return "ERROR", fmt.Errorf("audio upload failed: %v", err)
+			return "ERROR", 0, fmt.Errorf("audio upload failed: %v", err)
 		}
 		msgProto = getAudioProto(m)
 	case LocationMessage:
@@ -70,7 +70,7 @@ func (wac *Conn) Send(msg interface{}) (string, error) {
 	case OrderMessage:
 		msgProto = getOrderMessageProto(m)
 	default:
-		return "ERROR", fmt.Errorf("cannot match type %T, use message types declared in the package", msg)
+		return "ERROR", 0, fmt.Errorf("cannot match type %T, use message types declared in the package", msg)
 	}
 
 	status := proto.WebMessageInfo_PENDING
@@ -78,26 +78,27 @@ func (wac *Conn) Send(msg interface{}) (string, error) {
 
 	ch, err := wac.sendProto(msgProto)
 	if err != nil {
-		return "ERROR", fmt.Errorf("could not send proto: %v", err)
+		return "ERROR", 0, fmt.Errorf("could not send proto: %v", err)
 	}
 
 	select {
 	case response := <-ch:
 		var resp map[string]interface{}
 		if err = json.Unmarshal([]byte(response), &resp); err != nil {
-			return "ERROR", fmt.Errorf("error decoding sending response: %v\n", err)
+			return "ERROR", 0, fmt.Errorf("error decoding sending response: %v\n", err)
 		}
 		if int(resp["status"].(float64)) != 200 {
-			return "ERROR", fmt.Errorf("message sending responded with %v", resp["status"])
+			return "ERROR", 0, fmt.Errorf("message sending responded with %v", resp["status"])
 		}
 		if int(resp["status"].(float64)) == 200 {
-			return getMessageInfo(msgProto).Id, nil
+			msgInfo := getMessageInfo(msgProto)
+			return msgInfo.Id, msgInfo.Timestamp, nil
 		}
 	case <-time.After(wac.msgTimeout):
-		return "ERROR", fmt.Errorf("sending message timed out")
+		return "ERROR", 0, fmt.Errorf("sending message timed out")
 	}
 
-	return "ERROR", nil
+	return "ERROR", 0, nil
 }
 
 func (wac *Conn) sendProto(p *proto.WebMessageInfo) (<-chan string, error) {
@@ -142,7 +143,7 @@ func (wac *Conn) RevokeMessage(remotejid, msgid string, fromme bool) (revokeid s
 		},
 		Status: &status,
 	}
-	if _, err := wac.Send(revoker); err != nil {
+	if _, _, err := wac.Send(revoker); err != nil {
 		return revocationID, err
 	}
 	return revocationID, nil
